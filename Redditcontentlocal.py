@@ -1,68 +1,99 @@
-import praw
-from moviepy.editor import *
-from google.cloud import texttospeech
+# ---------------------------------------------------------------
+# Reddit-to-TikTok Video Generator 🚀
+# ---------------------------------------------------------------
+# This script fetches top Reddit posts, rewrites them for TikTok
+# engagement using OpenAI, generates TTS audio, and creates a
+# vertical video with subtitles and background visuals.
+#
+# It's modular, hackable, and ready for your wildest content
+# automation dreams! Swap out Reddit, TTS, or video backgrounds
+# with your own flavors. Have fun!
+# ---------------------------------------------------------------
+
+import praw  # Reddit API wrapper - fetches posts/comments
+from moviepy.editor import *  # MoviePy - for video/audio editing
+from google.cloud import texttospeech  # Google TTS - for natural-sounding voices
 import os
-from PIL import Image # Retained for potential future use, but not for current background
+from PIL import Image  # For future image background support (not used now)
 import random
-from faster_whisper import WhisperModel # Added for word-level timestamps
+from faster_whisper import WhisperModel  # For word-level subtitle timing
 import unicodedata
-from pydub import AudioSegment
+from pydub import AudioSegment  # For audio trimming
 from pydub.silence import detect_nonsilent
 import re
-from dotenv import load_dotenv
-from openai import OpenAI  # <-- Add this at the top, replace 'import openai'
+from dotenv import load_dotenv  # For keeping secrets out of your codebase
+from openai import OpenAI  # OpenAI API for rewriting content
 import gc
 import time
 
+# ---------------------------------------------------------------
+# Load environment variables (keep your API keys safe, kids!)
+# ---------------------------------------------------------------
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openAI.api_key = OPENAI_API_KEY
 
+# ---------------------------------------------------------------
+# Set up paths and constants
+# ---------------------------------------------------------------
 os.environ["IMAGEMAGICK_BINARY"] = r"C:\Program Files\ImageMagick-7.1.1-Q16-HDRI\magick.exe"
-# ---- Reddit Setup ---- #
-REDDIT_CLIENT_ID = "lId4BZPOYJUTBXhArBnswA" # Replace with your actual ID
-REDDIT_CLIENT_SECRET = "rkK0OEceurFnL6xNMNEeN_XZFK1lJg" # Replace with your actual secret
-REDDIT_USER_AGENT = "script:ContentMaker:v1.0 (by u/veexer)" # Replace with your user agent
+REDDIT_CLIENT_ID = "lId4BZPOYJUTBXhArBnswA"  # <-- Replace with your own!
+REDDIT_CLIENT_SECRET = "rkK0OEceurFnL6xNMNEeN_XZFK1lJg"
+REDDIT_USER_AGENT = "script:ContentMaker:v1.0 (by u/veexer)"
 SUBREDDIT = "showerthoughts"
-# ---- Video Constants ---- #
-VIDEO_WIDTH, VIDEO_HEIGHT = 1080, 1920
+VIDEO_WIDTH, VIDEO_HEIGHT = 1080, 1920  # TikTok/Shorts aspect ratio
 BACKGROUND_VIDEO_CHOICES = ["MCPARKOUR.mp4", "MCPARKOUR1.mp4"]
-BACKGROUND_MUSIC_PATH = "Charm - Anno Domini Beats.mp3" # Path to your background music file
+BACKGROUND_MUSIC_PATH = "Charm - Anno Domini Beats.mp3"
 USED_THREADS_FILE = "used_threads.txt"
 
-# ---- Audio Speed & Volume Settings ----
-TITLE_AUDIO_SPEED = 1.10         # Speed for title TTS
-COMMENT_AUDIO_SPEED = 1.10       # Speed for comment TTS
-TRANSITION_AUDIO_SPEED = 1.0     # Speed for transition sound
-TRANSITION_VOLUME = 0.6          # 60% volume (lowered by 40%)
-BG_MUSIC_VOLUME = 0.1            # 10% volume for background music
+# ---------------------------------------------------------------
+# Audio settings (tweak for your vibe)
+# ---------------------------------------------------------------
+TITLE_AUDIO_SPEED = 1.10
+COMMENT_AUDIO_SPEED = 1.10
+TRANSITION_AUDIO_SPEED = 1.0
+TRANSITION_VOLUME = 0.6
+BG_MUSIC_VOLUME = 0.1
 
+# ---------------------------------------------------------------
+# Utility: Remove temp files safely (Windows can be stubborn!)
+# ---------------------------------------------------------------
 def safe_remove(filepath, retries=5, delay=0.5):
-    """Try to remove a file, retrying if it's locked (Windows MoviePy bug workaround)."""
+    """Try to remove a file, retrying if it's locked (MoviePy/Windows bug workaround)."""
     for attempt in range(retries):
         try:
             os.remove(filepath)
             return True
         except PermissionError:
-            gc.collect()  # Force garbage collection to release file handles
+            gc.collect()  # Release file handles
             time.sleep(delay)
         except Exception as e:
             print(f"Error removing {filepath}: {e}")
             break
     print(f"Could not remove temp audio file {filepath}: still locked after {retries} attempts.")
     return False
-# ---- Fetch Reddit Content ---- #
+
+# ---------------------------------------------------------------
+# Fetch Reddit Content
+# ---------------------------------------------------------------
 def load_used_threads():
+    """Load titles of threads already used, so we don't repeat content."""
     if not os.path.exists(USED_THREADS_FILE):
         return set()
     with open(USED_THREADS_FILE, "r", encoding="utf-8") as f:
         return set(line.strip() for line in f.readlines())
 
 def save_used_thread(title):
+    """Mark a thread as used by saving its title."""
     with open(USED_THREADS_FILE, "a", encoding="utf-8") as f:
         f.write(title.strip() + "\n")
 
 def fetch_reddit_post():
+    """
+    Fetch a top Reddit post and its best comments.
+    Avoids posts with images/links in the title.
+    Returns: title, selftext, comments, subreddit_name
+    """
     N = 7  # Number of comments you want in your video
     MAX_COMMENT_LEN = 250
     used_threads = load_used_threads()
@@ -85,15 +116,18 @@ def fetch_reddit_post():
         return None, None, [], subreddit_name
 
     def title_has_image(title):
+        """Detect if the title is likely an image/link post."""
         title_lower = title.lower()
         image_keywords = ['.jpg', '.jpeg', '.png', '.gif', 'imgur.com', 'i.redd.it', 'http', 'https', 'pic.twitter.com']
         return any(keyword in title_lower for keyword in image_keywords)
 
+    # Try to find a post we haven't used and that isn't just an image/link
     for post in posts:
         if post.title.strip() not in used_threads and not title_has_image(post.title):
             top_post = post
             break
     else:
+        # If all have images/links, just pick an unused one
         for post in posts:
             if post.title.strip() not in used_threads:
                 top_post = post
@@ -102,6 +136,7 @@ def fetch_reddit_post():
             print("No new posts found that haven't been used before.")
             return None, None, [], subreddit_name
 
+    # Gather top comments, preserving parent-child relationships for context
     comments = []
     comment_map = {}
     parent_map = {}
@@ -143,21 +178,23 @@ def fetch_reddit_post():
         comments = result[:N]
         if not comments:
             print("Not enough comments found. Skipping thread.")
-            save_used_thread(top_post.title)  # <--- Save original title if skipping!
+            save_used_thread(top_post.title)  # Save original title if skipping!
             return None, None, [], subreddit_name
     else:
         print("Could not retrieve comment list.")
-        save_used_thread(top_post.title)  # <--- Save original title if skipping!
+        save_used_thread(top_post.title)  # Save original title if skipping!
         return None, None, [], subreddit_name
 
     return top_post.title, top_post.selftext, comments, subreddit_name
 
-# ---- TTS Generation ---- #
-from google.cloud import texttospeech
-
-# Update TTS function to use en-US-Wavenet-D
+# ---------------------------------------------------------------
+# TTS Generation (Google Cloud TTS)
+# ---------------------------------------------------------------
 def text_to_speech_gtts(text, filename):
-    """Generate TTS using Google Cloud TTS with a natural US English WaveNet voice."""
+    """
+    Generate TTS using Google Cloud TTS with a natural US English WaveNet voice.
+    You can swap this out for ElevenLabs, Coqui, or your favorite TTS!
+    """
     client = texttospeech.TextToSpeechClient()
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
@@ -184,15 +221,15 @@ def text_to_speech_gtts(text, filename):
         print(f"Error generating TTS for '{text[:30]}...': {e}")
         return False
 
-# ---- Faster Whisper Functions (from backup.py) ---- #
+# ---------------------------------------------------------------
+# Faster Whisper Functions (word-level subtitle timing)
+# ---------------------------------------------------------------
 def get_word_timestamps(audio_path):
-    """Transcribe audio and return word-level timestamps using faster-whisper."""
-    # Consider making model a global variable or passing it to avoid reloading
-    # For simplicity here, loading it each time.
-    # Common models: "tiny", "base", "small", "medium", "large-v2"
-    # "base" is a good starting point for balance.
+    """
+    Transcribe audio and return word-level timestamps using faster-whisper.
+    You can swap this for OpenAI Whisper or any other ASR!
+    """
     try:
-        # Suppress excessive logging from faster-whisper if possible
         model = WhisperModel("base", device="cpu", compute_type="int8")
         segments, _ = model.transcribe(audio_path, word_timestamps=True)
         word_timings = []
@@ -208,9 +245,13 @@ def get_word_timestamps(audio_path):
         print(f"Error getting word timestamps for {audio_path}: {e}")
         return []
 
-# --- Helper for colored username in subtitles ---
+# ---------------------------------------------------------------
+# Helper for colored username in subtitles
+# ---------------------------------------------------------------
 def make_highlighted_subtitle(sentence, highlight_idx, highlight_color="#FF4567", base_color="white", highlight_bg_color="black", username_color="#00BFFF"):
-    # Split on first colon to separate username
+    """
+    Style a subtitle so the username is colored, and a specific word is highlighted.
+    """
     if ':' in sentence:
         username, rest = sentence.split(':', 1)
         username_words = username.split()
@@ -234,15 +275,19 @@ def make_highlighted_subtitle(sentence, highlight_idx, highlight_color="#FF4567"
             styled.append(f"<span foreground='{color}'>{clean_word}</span>")
     return " ".join(styled)
 
-# --- Update create_word_synced_subtitles to use the new make_highlighted_subtitle ---
+# ---------------------------------------------------------------
+# Create word-synced subtitles for a sentence/audio
+# ---------------------------------------------------------------
 def create_word_synced_subtitles(audio_path, sentence, video_width, offset=0, color='white'):
+    """
+    Create a list of MoviePy TextClips for each word, timed to the audio.
+    """
     word_timings = get_word_timestamps(audio_path)
     audio_duration = AudioFileClip(audio_path).duration
     subtitle_font = r"C:\Windows\Fonts\NotoSans-Regular.ttf"  # or 'Arial'
 
-    # --- Dynamically set subtitle offset based on message length ---
+    # Dynamically set subtitle offset based on message length
     base_offset = 0.01
-    # If it's a long message (e.g., > 25 words), increase the offset
     if len(sentence.split()) > 25:
         subtitle_offset = 0.10  # Try 0.18s for long OP messages
     else:
@@ -259,7 +304,7 @@ def create_word_synced_subtitles(audio_path, sentence, video_width, offset=0, co
                 color=color,
                 font=subtitle_font,
                 stroke_color='black',
-                stroke_width=16,  # <--- Make border thicker here!
+                stroke_width=16,
                 bg_color='rgba(0,0,0,0.7)',
                 size=(video_width * 0.85, None),
                 method='pango',
@@ -303,7 +348,7 @@ def create_word_synced_subtitles(audio_path, sentence, video_width, offset=0, co
             color=color,
             font=subtitle_font,
             stroke_color='black',
-            stroke_width=16,  # <--- Make border thicker here!
+            stroke_width=16,
             bg_color='rgba(0,0,0,0.7)',
             size=(video_width * 0.90, None),
             method='pango',
@@ -313,20 +358,24 @@ def create_word_synced_subtitles(audio_path, sentence, video_width, offset=0, co
         clips.append(txt_clip)
     return clips
 
-
-# ---- Create Video ---- #
+# ---------------------------------------------------------------
+# Video Creation!
+# ---------------------------------------------------------------
 MAX_VIDEO_DURATION = 120  # seconds
 MIN_VIDEO_DURATION = 30  # seconds
 
 def create_video(title, comments, output_filename=None):
+    """
+    Assemble the final TikTok video from all the pieces!
+    This is where the magic happens. 🎬
+    """
     color_palette = [
         "#FF4500", "#00BFFF", "#FFD700", "#32CD32",
         "#FF69B4", "#FFFFFF", "#00FFFF", "#FFA500",
     ]
 
     BACKGROUND_VIDEO_CHOICES = [
-        "MCPARKOUR.mp4", "MCPARKOUR1.mp4", "MCPARKOUR2.mp4", "MCPARKOUR3.mp4",
-        "MCPARKOUR4.mp4", "MCPARKOUR5.mp4", "MCPARKOUR6.mp4", "SSbackground.mp4", "SSBackground2.mp4"
+        "MCPARKOUR.mp4", "MCPARKOUR1.mp4"
     ]
     background_video_path = random.choice(BACKGROUND_VIDEO_CHOICES)
     if not os.path.exists(background_video_path):
@@ -528,23 +577,6 @@ def create_video(title, comments, output_filename=None):
     else:
         slide_background_clip = background_video_full.subclip(0, total_video_duration)
 
-    print(f"[DEBUG] background_video_full.duration: {background_video_full.duration}")
-    print(f"[DEBUG] total_video_duration: {total_video_duration}")
-    print(f"[DEBUG] slide_background_clip: {slide_background_clip}")
-    print(f"[DEBUG] type(slide_background_clip): {type(slide_background_clip)}")
-
-    if slide_background_clip is None:
-        print("Error: slide_background_clip is None. Cannot proceed with video creation.")
-        print(f"Debug info: background_video_full.duration={background_video_full.duration}, total_video_duration={total_video_duration}")
-        background_video_full.close()
-        if background_music_clip: background_music_clip.close()
-        if final_audio_clip: final_audio_clip.close()
-        for aud_file in audio_files_to_cleanup:
-            if os.path.exists(aud_file): os.remove(aud_file)
-        return
-
-    slide_background_clip = slide_background_clip.resize(width=VIDEO_WIDTH, height=VIDEO_HEIGHT).set_position("center")
-
     # --- Secondary Background (Visual Stimulation) ---
     ADDITIONAL_BG_CHOICES = ["add1.mp4", "add2.mp4", "add3.mp4", "add4.mp4"]
     additional_bg_path = random.choice(ADDITIONAL_BG_CHOICES)
@@ -645,7 +677,7 @@ def create_video(title, comments, output_filename=None):
     try:
         print(f"Writing final video to {output_filename}...")
         final_video.write_videofile(output_filename, fps=24, codec="libx264", audio_codec="aac")
-        print("Video generation complete!")
+        print("Video generation complete! 🎉")
     except Exception as e:
         print(f"Error writing final video file: {e}")
     finally:
@@ -682,18 +714,27 @@ def create_video(title, comments, output_filename=None):
             if os.path.exists(aud_file):
                 safe_remove(aud_file)
 
+# ---------------------------------------------------------------
+# Utility Functions
+# ---------------------------------------------------------------
 def sanitize_text(text):
+    """
+    Clean up text for subtitles and TTS.
+    Removes weird unicode, replaces curly quotes, etc.
+    """
     replacements = {
         '“': '"', '”': '"', '‘': "'", '’': "'",
         '–': '-', '—': '-', '…': '...',
     }
     for orig, repl in replacements.items():
         text = text.replace(orig, repl)
-    # Remove only control characters, keep all printable Unicode 
     text = ''.join(ch for ch in text if ch.isprintable())
     return " ".join(str(text).split())
 
 def speedup_audio(input_path, output_path, speed):
+    """
+    Speed up an audio file using MoviePy.
+    """
     from moviepy.editor import AudioFileClip, vfx
     audio = AudioFileClip(input_path)
     faster_audio = audio.fx(vfx.speedx, speed)
@@ -702,6 +743,9 @@ def speedup_audio(input_path, output_path, speed):
     faster_audio.close()
 
 def speedup_transition(input_path, output_path, speed):
+    """
+    Speed up the transition sound effect.
+    """
     from moviepy.editor import AudioFileClip, vfx
     audio = AudioFileClip(input_path)
     faster_audio = audio.fx(vfx.speedx, speed)
@@ -710,6 +754,9 @@ def speedup_transition(input_path, output_path, speed):
     faster_audio.close()
 
 def trim_silence(input_path, output_path, silence_thresh=-40, min_silence_len=250):
+    """
+    Trim silence from the start and end of an audio file.
+    """
     audio = AudioSegment.from_file(input_path, format="mp3")
     nonsilent_ranges = detect_nonsilent(audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
     if nonsilent_ranges:
@@ -720,7 +767,9 @@ def trim_silence(input_path, output_path, silence_thresh=-40, min_silence_len=25
         trimmed_audio = audio
     trimmed_audio.export(output_path, format="mp3")
 
-# Update the rewrite function to target English, not Polish
+# ---------------------------------------------------------------
+# Rewrite Reddit Content for TikTok Engagement (OpenAI)
+# ---------------------------------------------------------------
 def rewrite_content_for_engagement(title, op_message, comments):
     """
     Use OpenAI to rewrite Reddit content to be more engaging for TikTok.
@@ -791,6 +840,9 @@ def rewrite_content_for_engagement(title, op_message, comments):
         return title, op_message, comments, "reddit_video", []
 
 def extract_comments(comments):
+    """
+    Extract just the comment text from various possible OpenAI JSON formats.
+    """
     extracted = []
     for c in comments:
         if isinstance(c, dict):
@@ -822,10 +874,12 @@ def replace_subreddit_mentions(text, en_name, pl_name):
     """No-op for English version, just return the text unchanged."""
     return text
 
-
-
+# ---------------------------------------------------------------
+# Main Script Entry Point
+# ---------------------------------------------------------------
 if __name__ == "__main__":
-    x = 30  # <-- Set how many successful videos you want to generate
+    # How many videos do you want to generate? Set x!
+    x = 30
     generated = 0
     attempts = 0
     while generated < x:
@@ -879,3 +933,7 @@ if __name__ == "__main__":
             import traceback
             traceback.print_exc()
             continue
+
+# ---------------------------------------------------------------
+# End of script! Go make some viral videos! 😎
+# ---------------------------------------------------------------
