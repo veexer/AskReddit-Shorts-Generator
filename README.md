@@ -35,15 +35,32 @@ Welcome to the **Reddit-to-TikTok Video Generator** – your all-in-one, modular
     OPENAI_API_KEY=your-openai-key
     GOOGLE_APPLICATION_CREDENTIALS=path-to-your-google-credentials.json
     ```
+    - For Reddit API credentials, see [this guide](https://praw.readthedocs.io/en/stable/getting_started/authentication.html).
+    - For Google Cloud TTS, see [this guide](https://cloud.google.com/text-to-speech/docs/quickstart-client-libraries).
 
-3. **Place your background videos and music** in the project directory (see variables at the top of `Redditcontentlocal.py`).
+3. **Place your background videos and music** in the project directory (see variables at the top of `Redditcontentlocal.py`).  
+   You can use your own files—just update the filenames in the script!
 
 4. **Run the script:**
     ```sh
     python Redditcontentlocal.py
     ```
 
-5. **Check your output videos** in the configured output directory!
+5. **Check your output videos** in the configured output directory! (Default is usually `D:\autoedit\60\Reddit`—you can change this in the script.)
+
+---
+
+## 🌍 Polish Language Version
+
+Want to generate videos in Polish?  
+Check out `Redditcontentmanual.py`—it’s a localized version of the main script, perfect for Polish TikTok or Shorts!  
+Just follow the same setup steps and run:
+```sh
+python Redditcontentmanual.py
+```
+Now you’re ready to go viral in two languages. Multilingual flex! 💪
+
+---
 
 ## 🧩 Customization
 
@@ -63,11 +80,38 @@ Welcome to the **Reddit-to-TikTok Video Generator** – your all-in-one, modular
 - [Pydub](https://github.com/jiaaro/pydub)
 - [dotenv](https://pypi.org/project/python-dotenv/)
 
+## 📦 Requirements
+
+- All Python dependencies are in `requirements.txt`:
+    ```sh
+    pip install -r requirements.txt
+    ```
+- You’ll also need [ffmpeg](https://ffmpeg.org/) and [ImageMagick](https://imagemagick.org/) installed and on your system PATH for MoviePy and text rendering.
+
+## 📂 Output
+
+- Generated videos and tags will appear in the output directory set in the script (default: `D:\autoedit\60\Reddit`).
+- You can change this path at the top of `Redditcontentlocal.py`.
+
+## 🛠️ Troubleshooting
+
+- **Font errors?** Make sure the font path in the script matches a font installed on your system.
+- **MoviePy/ImageMagick errors?** Double-check that both are installed and available in your system PATH.
+- **API errors?** Make sure your credentials are correct and not expired.
+- **Missing media files?** Use your own background videos/music or update the filenames in the script.
+
+If you get stuck, don’t panic—just open an issue or reach out! Even the best bots need a little help sometimes. 🤖
+
 ## 🏆 Why Use This Project?
 
 - **Automate your content pipeline** and never run out of TikTok ideas.
 - **Show off your Python chops** with a modular, well-documented codebase.
 - **Easily extend or hack** for your own wild content automation dreams.
+
+## 🤗 Contributing
+
+Pull requests, stars, and feedback are always welcome!  
+Let’s make content automation even more fun together. 🚀
 
 ## 🙌 About the Author
 
