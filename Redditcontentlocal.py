@@ -26,7 +26,7 @@ REDDIT_USER_AGENT = "script:ContentMaker:v1.0 (by u/veexer)" # Replace with your
 SUBREDDIT = "showerthoughts"
 # ---- Video Constants ---- #
 VIDEO_WIDTH, VIDEO_HEIGHT = 1080, 1920
-BACKGROUND_VIDEO_CHOICES = ["MCPARKOUR.mp4", "MCPARKOUR1.mp4","MCPARKOUR2.mp4","MCPARKOUR3.mp4","MCPARKOUR4.mp4","MCPARKOUR5.mp4","MCPARKOUR6.mp4", "SSbackground.mp4","SSBackground2.mp4"]
+BACKGROUND_VIDEO_CHOICES = ["MCPARKOUR.mp4", "MCPARKOUR1.mp4"]
 BACKGROUND_MUSIC_PATH = "Charm - Anno Domini Beats.mp3" # Path to your background music file
 USED_THREADS_FILE = "used_threads.txt"
 
