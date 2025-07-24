@@ -26,7 +26,7 @@ Welcome to the **Reddit-to-TikTok Video Generator** – your all-in-one, modular
 1. **Clone the repo** and install dependencies:
     ```sh
     git clone https://github.com/veexer/AskReddit-Shorts-Generator
-    cd reddit-tiktok-generator
+    cd AskReddit-Shorts-Generator
     pip install -r requirements.txt
     ```
 
