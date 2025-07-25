@@ -97,15 +97,15 @@ Now you’re ready to go viral in two languages. Multilingual flex! 💪
 
 - **Font errors?** Make sure the font path in the script matches a font installed on your system.
 - **MoviePy/ImageMagick errors?** Double-check that both are installed and available in your system PATH.
-- **API errors?** Make sure your credentials are correct and not expired.
+- **API errors?** Make sure your credentials are correctly set in the .env file and not expired.
 - **Missing media files?** Use your own background videos/music or update the filenames in the script.
 
-If you get stuck, don’t panic—just open an issue or reach out! Even the best bots need a little help sometimes. 🤖
+If you get stuck, don’t panic—just open an issue or reach out! Even the best need a little help sometimes. 
 
 ## 🏆 Why Use This Project?
 
 - **Automate your content pipeline** and never run out of TikTok ideas.
-- **Show off your Python chops** with a modular, well-documented codebase.
+- **Simple to adapt** with a modular, well-documented codebase.
 - **Easily extend or hack** for your own wild content automation dreams.
 
 ## 🤗 Contributing
